@@ -1,0 +1,185 @@
+<!DOCTYPE html><html>
+<head>
+<meta charset="utf-8">
+<title>Advanced Sprite BIN / Atlas Tool</title>
+<style>
+body{font-family:sans-serif;background:#0e0e0e;color:#eee;padding:20px}
+h1{font-size:22px}
+canvas{border:1px solid #555;margin-top:10px;background:#000}
+button,input{margin:6px;padding:8px}
+.panel{margin-top:10px;padding:10px;border:1px solid #444;border-radius:6px}
+</style>
+</head>
+<body><h1>Sprite / BIN / Atlas 动画工具</h1><div class="panel">
+上传Sprite Sheet
+<input type="file" id="imgInput">
+<br>
+帧宽 <input id="fw" type="number" value="64">
+帧高 <input id="fh" type="number" value="64">
+<br>
+<button onclick="slice()">自动切帧</button>
+<button onclick="preview()">预览动画</button>
+<button onclick="exportXML()">导出XML</button>
+<button onclick="exportJSON()">导出JSON</button>
+<button onclick="exportBIN()">导出BIN</button>
+</div><div class="panel">
+动画预览
+<br>
+<canvas id="view" width="256" height="256"></canvas>
+</div><div class="panel">
+原始Sprite
+<br>
+<canvas id="sheet"></canvas>
+</div><script>
+let img=new Image()
+let frames=[]
+let sheet=document.getElementById("sheet")
+let sheetCtx=sheet.getContext("2d")
+
+let view=document.getElementById("view")
+let viewCtx=view.getContext("2d")
+
+let playing=false
+
+// 读取图片
+
+document.getElementById("imgInput").onchange=e=>{
+ let file=e.target.files[0]
+ let url=URL.createObjectURL(file)
+
+ img.onload=()=>{
+  sheet.width=img.width
+  sheet.height=img.height
+  sheetCtx.drawImage(img,0,0)
+ }
+
+ img.src=url
+}
+
+// 自动切帧
+
+function slice(){
+ frames=[]
+
+ let fw=parseInt(document.getElementById("fw").value)
+ let fh=parseInt(document.getElementById("fh").value)
+
+ for(let y=0;y<img.height;y+=fh){
+  for(let x=0;x<img.width;x+=fw){
+   frames.push({x,y,w:fw,h:fh,time:80})
+  }
+ }
+
+ alert("识别帧数: "+frames.length)
+}
+
+// 动画预览
+
+function preview(){
+ if(frames.length==0){alert("请先切帧") ; return}
+
+ playing=true
+ let i=0
+
+ function loop(){
+
+  if(!playing)return
+
+  let f=frames[i]
+
+  viewCtx.clearRect(0,0,view.width,view.height)
+
+  viewCtx.drawImage(
+   img,
+   f.x,f.y,f.w,f.h,
+   0,0,f.w,f.h
+  )
+
+  i++
+  if(i>=frames.length) i=0
+
+  setTimeout(loop,f.time)
+ }
+
+ loop()
+}
+
+// XML
+
+function exportXML(){
+ let xml='<TextureAtlas imagePath="sprite.png">\n'
+
+ frames.forEach((f,i)=>{
+  xml+=` <SubTexture name="frame_${i}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}"/>\n`
+ })
+
+ xml+='</TextureAtlas>'
+
+ download("atlas.xml",xml)
+}
+
+// JSON
+
+function exportJSON(){
+ let data={frames:frames}
+
+ download("frames.json",JSON.stringify(data,null,2))
+}
+
+// BIN
+
+function exportBIN(){
+
+ let xml='<animation>'
+
+ frames.forEach(f=>{
+  xml+=`<frame x="${f.x}" y="${f.y}" w="${f.w}" h="${f.h}" time="${f.time}"/>`
+ })
+
+ xml+='</animation>'
+
+ let enc=new TextEncoder()
+ let xmlBytes=enc.encode(xml)
+
+ fetch(img.src)
+ .then(r=>r.arrayBuffer())
+ .then(png=>{
+
+  let size=4+xmlBytes.length+4+png.byteLength
+
+  let buf=new ArrayBuffer(size)
+  let dv=new DataView(buf)
+
+  let off=0
+
+  dv.setUint32(off,xmlBytes.length,true); off+=4
+
+  new Uint8Array(buf,off,xmlBytes.length).set(xmlBytes); off+=xmlBytes.length
+
+  dv.setUint32(off,png.byteLength,true); off+=4
+
+  new Uint8Array(buf,off,png.byteLength).set(new Uint8Array(png))
+
+  downloadBin("sprite.bin",buf)
+
+ })
+}
+
+function download(name,data){
+ let blob=new Blob([data])
+ let a=document.createElement("a")
+ a.href=URL.createObjectURL(blob)
+ a.download=name
+ a.click()
+}
+
+function downloadBin(name,data){
+ let blob=new Blob([data])
+ let a=document.createElement("a")
+ a.href=URL.createObjectURL(blob)
+ a.download=name
+ a.click()
+}
+
+</script></body>
+</html>
